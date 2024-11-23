@@ -3,7 +3,6 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.fernet import Fernet
 import ssl
 import socket
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
 class Server(BasicMessenger):
     def generate_symmetric_key(self):
