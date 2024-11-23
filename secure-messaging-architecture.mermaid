@@ -1,0 +1,61 @@
+classDiagram
+    class BasicMessenger {
+        +setup_connection()
+        +encrypt_message()
+        +decrypt_message()
+        +manage_keys()
+    }
+    
+    class Client {
+        -ssl_connection
+        -encryption_mode
+        -symmetric_key
+        -asymmetric_keys
+        +connect_to_server()
+        +send_message()
+        +receive_message()
+        +load_keys()
+    }
+    
+    class Server {
+        -ssl_connection
+        -encryption_mode
+        -symmetric_key
+        -asymmetric_keys
+        +start_server()
+        +handle_client()
+        +generate_keys()
+        +manage_connections()
+    }
+    
+    class EncryptionModes {
+        <<enumeration>>
+        PLAIN_TEXT
+        SYMMETRIC
+        ASYMMETRIC
+    }
+    
+    class KeyManagement {
+        +symmetric_keys
+        +public_keys
+        +private_keys
+        +generate_symmetric_key()
+        +generate_rsa_pair()
+        +load_keys()
+        +save_keys()
+    }
+    
+    BasicMessenger <|-- Client
+    BasicMessenger <|-- Server
+    Client --> EncryptionModes
+    Server --> EncryptionModes
+    Client --> KeyManagement
+    Server --> KeyManagement
+    
+    note for BasicMessenger "Base class for shared functionality\n- SSL setup\n- Encryption/Decryption\n- Key management"
+    
+    note for Client "Client Implementation\n- SSL connection\n- Message handling\n- Key storage"
+    
+    note for Server "Server Implementation\n- SSL listener\n- Client handling\n- Key generation"
+    
+    note for KeyManagement "Key Management\n- keys.txt\n- server_public_keys.txt\n- client_public_keys.txt"
