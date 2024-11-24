@@ -54,6 +54,9 @@ class Server(BasicMessenger):
                 break
             decoded_message = received_message.decode()
             print(f"Client: {decoded_message}")
+            if decoded_message == 'bye':
+                print(f"Client closed the connection by saying: {decoded_message}")
+                break
 
             response = input("Reply: ")
             encoded_message = response.encode()
@@ -67,7 +70,9 @@ class Server(BasicMessenger):
                 break
             decrypted_message = self.decrypt_symmetric(received_message)
             print(f"Client: {decrypted_message}")
-
+            if decrypted_message == 'bye':
+                print(f"Client closed the connection by saying: {decrypted_message}")
+                break
             response = input("Reply: ")
             encrypted_response = self.encrypt_symmetric(response)
             channel.sendall(encrypted_response)
@@ -81,7 +86,9 @@ class Server(BasicMessenger):
                 break
             decrypted_message = self.decrypt_asymmetric(received_message)
             print(f"Client: {decrypted_message}")
-
+            if decrypted_message == 'bye':
+                print(f"Client closed the connection by saying: {decrypted_message}")
+                break
             response = input("Reply: ")
             encrypted_response = self.encrypt_asymmetric(response, client_public_key)
             channel.sendall(encrypted_response)
