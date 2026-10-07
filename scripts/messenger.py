@@ -1,83 +1,104 @@
-# Import necessary libraries for logging, cryptography, and networking
-import logging
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import hashes
+"""Shared transport and encryption helpers for the local chat demo."""
 
-# Configure logging for debugging and diagnostics
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+import os
+import struct
+from pathlib import Path
+
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
+
+
+DATA_DIR = Path(os.environ.get("ISS_DATA_DIR", Path(__file__).resolve().parents[1] / ".runtime"))
+MAX_FRAME = 64 * 1024
+
+
+def ensure_data_dir():
+    DATA_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    DATA_DIR.chmod(0o700)
+
+
+def send_frame(channel, payload):
+    if len(payload) > MAX_FRAME:
+        raise ValueError("Message is too large")
+    channel.sendall(struct.pack("!I", len(payload)) + payload)
+
+
+def receive_frame(channel):
+    def read_exactly(size):
+        data = bytearray()
+        while len(data) < size:
+            chunk = channel.recv(size - len(data))
+            if not chunk:
+                if not data:
+                    return None
+                raise ConnectionError("Connection closed during a message")
+            data.extend(chunk)
+        return bytes(data)
+
+    header = read_exactly(4)
+    if header is None:
+        return None
+    size = struct.unpack("!I", header)[0]
+    if size > MAX_FRAME:
+        raise ValueError("Incoming message is too large")
+    payload = read_exactly(size)
+    if payload is None:
+        raise ConnectionError("Connection closed during a message")
+    return payload
+
 
 class BasicMessenger:
-    def __init__(self, host='localhost', port=65432, mode='none'):
-        # Initialize messenger attributes, including networking and encryption settings
-        self.symmetric_key = None
+    def __init__(self, host="localhost", port=65432, mode="none"):
+        if mode not in {"none", "symmetric", "asymmetric"}:
+            raise ValueError("Mode must be none, symmetric, or asymmetric")
         self.host = host
         self.port = port
-        self.server_socket = None
-        self.client_socket = None
         self.mode = mode
+        self.symmetric_key = None
         self.private_key = None
         self.public_key = None
 
     def encrypt_symmetric(self, message):
-        # Encrypt a message using symmetric encryption (Fernet)
-        if not self.symmetric_key:
-            raise ValueError("Symmetric key is not set.")
-        logging.debug(f"Encrypting message symmetrically: {message}")
-        fernet = Fernet(self.symmetric_key)
-        encrypted_message = fernet.encrypt(message.encode())
-        logging.debug(f"Encrypted message: {encrypted_message}")
-        return encrypted_message
+        if self.symmetric_key is None:
+            raise ValueError("Symmetric key is not set")
+        return Fernet(self.symmetric_key).encrypt(message.encode())
 
-    def decrypt_symmetric(self, encrypted_message):
-        # Decrypt a message using symmetric encryption (Fernet)
-        if not self.symmetric_key:
-            raise ValueError("Symmetric key is not set.")
-        logging.debug(f"Decrypting message symmetrically: {encrypted_message}")
-        fernet = Fernet(self.symmetric_key)
-        decrypted_message = fernet.decrypt(encrypted_message)
-        string_message = decrypted_message.decode()
-        logging.debug(f"Decrypted message: {string_message}")
-        return string_message
+    def decrypt_symmetric(self, payload):
+        if self.symmetric_key is None:
+            raise ValueError("Symmetric key is not set")
+        return Fernet(self.symmetric_key).decrypt(payload).decode()
 
     def generate_private_key(self):
-        # Generate an RSA private key for asymmetric encryption
-        private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048
-        )
-        return private_key
+        return rsa.generate_private_key(public_exponent=65537, key_size=2048)
 
     def generate_public_key(self, private_key):
-        # Generate an RSA public key from the private key
-        public_key = private_key.public_key()
-        return public_key
+        return private_key.public_key()
 
     def encrypt_asymmetric(self, message, public_key):
-        # Encrypt a message using the RSA public key
-        logging.debug(f"Encrypting message asymmetrically: {message}")
-        encrypted_message = public_key.encrypt(
+        return public_key.encrypt(
             message.encode(),
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
+            padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
         )
-        logging.debug(f"Encrypted message: {encrypted_message}")
-        return encrypted_message
 
-    def decrypt_asymmetric(self, encrypted_message):
-        # Decrypt a message using the RSA private key
-        logging.debug(f"Decrypting message asymmetrically: {encrypted_message}")
-        decrypted_message = self.private_key.decrypt(
-            encrypted_message,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                algorithm=hashes.SHA256(),
-                label=None
-            )
-        )
-        string_message = decrypted_message.decode()
-        logging.debug(f"Decrypted message: {string_message}")
-        return string_message
+    def decrypt_asymmetric(self, payload):
+        if self.private_key is None:
+            raise ValueError("Private key is not set")
+        return self.private_key.decrypt(
+            payload,
+            padding.OAEP(mgf=padding.MGF1(hashes.SHA256()), algorithm=hashes.SHA256(), label=None),
+        ).decode()
+
+    def encode_message(self, message, peer_public_key=None):
+        if self.mode == "symmetric":
+            return self.encrypt_symmetric(message)
+        if self.mode == "asymmetric":
+            return self.encrypt_asymmetric(message, peer_public_key)
+        return message.encode()
+
+    def decode_message(self, payload):
+        if self.mode == "symmetric":
+            return self.decrypt_symmetric(payload)
+        if self.mode == "asymmetric":
+            return self.decrypt_asymmetric(payload)
+        return payload.decode()

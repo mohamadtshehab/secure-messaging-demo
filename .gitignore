@@ -1,2 +1,21 @@
+# Local runtime material
+.runtime/
 server.crt
 server.key
+server_private.pem
+server_public.pem
+server_public_key.pem
+private_key.pem
+public_key.pem
+symmetric_key.key
+keys.txt
+client_public_keys.txt
+server_public_keys.txt
+
+# Python and local environments
+__pycache__/
+*.py[cod]
+.venv/
+issenv/
+.env
+.pytest_cache/
